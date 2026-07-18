@@ -16,6 +16,10 @@ with OpenVINO.
 | `.env` | Local runtime configuration, including the real database password. | No |
 | `library/` | Immich originals, uploads, thumbnails, profiles, encoded video, and backups. | No |
 | `postgres/` | Live PostgreSQL database files. | No |
+| `terraform/` | S3 recovery bucket, lifecycle, Object Lock, and backup IAM user. | Yes |
+| `scripts/` | S3 backup and staged-restore commands. | Yes |
+| `systemd/` | Persistent nightly backup service and timer templates. | Yes |
+| `docs/disaster-recovery.md` | Installation, monitoring, and recovery runbook. | Yes |
 
 The generated media and database directories are deliberately excluded from
 Git because they are large, host-specific runtime data. Back them up using a
@@ -87,3 +91,20 @@ docker compose down
 ```
 
 Never commit `.env`, the contents of `library/`, or the contents of `postgres/`.
+
+## Disaster-recovery backups
+
+The deployment includes Terraform and host tooling for an off-site S3 backup:
+
+- Media is incrementally uploaded to Glacier Deep Archive and retained
+  indefinitely.
+- A new logical PostgreSQL dump is made before each media upload.
+- Daily database dumps remain online for 30 days; one monthly dump is retained
+  in Deep Archive for 365 days.
+- The service coordinates with this host's unattended upgrades and automatic
+  reboot policy through a persistent systemd timer.
+- The restricted backup IAM user cannot delete objects or bypass governance
+  retention.
+
+Start with the [disaster-recovery runbook](docs/disaster-recovery.md). Terraform
+provisioning details are in [`terraform/README.md`](terraform/README.md).
