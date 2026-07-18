@@ -30,3 +30,9 @@ terraform/*_override.tf.json
 # Backup runtime and restore staging data
 .backup-state/
 restore-staging/
+
+# Ansible deployment-specific inventory, variables, and secrets
+ansible/inventory.yml
+ansible/vars.yml
+ansible/.vault-password
+ansible/*.retry
