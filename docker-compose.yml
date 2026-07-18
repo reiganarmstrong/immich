@@ -36,7 +36,7 @@ services:
     healthcheck:
       disable: false
 
-    stop_grace_period: 3m
+    stop_grace_period: 10m
 
 
   immich-machine-learning:
@@ -60,7 +60,7 @@ services:
     healthcheck:
       disable: false
 
-    stop_grace_period: 3m
+    stop_grace_period: 10m
 
 
   redis:
@@ -99,7 +99,7 @@ services:
     healthcheck:
       disable: false
 
-    stop_grace_period: 3m
+    stop_grace_period: 10m
 
 
 volumes:

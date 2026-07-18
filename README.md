@@ -40,6 +40,35 @@ separate backup process.
 
 4. Open `http://<server-address>:2283` to finish setup.
 
+### Docker shutdown timeout
+
+The Immich services use a 10-minute `stop_grace_period` so they have time to
+finish in-progress work during shutdown. The Docker systemd service must allow
+more time than that; this host required a 15-minute service shutdown timeout.
+
+Create or update the systemd override:
+
+```sh
+sudo systemctl edit docker.service
+```
+
+Add the following content:
+
+```ini
+[Service]
+TimeoutStopSec=15min
+```
+
+Then reload the systemd configuration:
+
+```sh
+sudo systemctl daemon-reload
+```
+
+The override is stored outside this repository at
+`/etc/systemd/system/docker.service.d/override.conf` and prevents systemd from
+terminating Docker before the containers' graceful shutdown period completes.
+
 ## Common operations
 
 ```sh
