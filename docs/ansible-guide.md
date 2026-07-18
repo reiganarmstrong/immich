@@ -163,6 +163,7 @@ all:
       hosts:
         immich:
           ansible_connection: local
+          ansible_become_exe: /usr/bin/sudo.ws
           ansible_host: localhost
           ansible_python_interpreter: /usr/bin/python3
 ```
@@ -175,6 +176,10 @@ Read this from the outside inward:
 - `hosts` starts the members of that group.
 - `immich` is an arbitrary friendly name for this target.
 - `ansible_connection: local` tells Ansible not to use SSH.
+- `ansible_become_exe: /usr/bin/sudo.ws` selects Ubuntu's installed classic
+  sudo implementation for Ansible. Ubuntu 26.04 uses `sudo-rs` by default, but
+  its different password prompt is not compatible with Ansible's prompt
+  detection on this host.
 - `ansible_host: localhost` identifies the current machine.
 - `ansible_python_interpreter` selects Python on the target.
 

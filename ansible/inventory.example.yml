@@ -5,5 +5,9 @@ all:
       hosts:
         immich:
           ansible_connection: local
+          # Ubuntu 26.04's sudo-rs prompt is not compatible with Ansible's
+          # password-prompt detection. Use the installed classic sudo only for
+          # Ansible privilege escalation.
+          ansible_become_exe: /usr/bin/sudo.ws
           ansible_host: localhost
           ansible_python_interpreter: /usr/bin/python3
