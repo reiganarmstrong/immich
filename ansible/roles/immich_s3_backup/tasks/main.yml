@@ -125,6 +125,8 @@
       destination: ansible/README.md
     - source: docs/deployment.md
       destination: docs/deployment.md
+    - source: docs/ansible-guide.md
+      destination: docs/ansible-guide.md
     - source: docs/disaster-recovery.md
       destination: docs/disaster-recovery.md
     - source: terraform/README.md

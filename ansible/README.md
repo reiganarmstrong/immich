@@ -4,6 +4,10 @@ This playbook deploys the host-side Immich S3 backup components. Terraform
 remains responsible for the AWS bucket and IAM resources; the playbook does
 not run `terraform apply` or create IAM access keys.
 
+If Ansible is new to you, start with the
+[beginner's guide](../docs/ansible-guide.md). It explains every file,
+task block, template, handler, variable, and execution phase in this role.
+
 ## What the playbook manages
 
 - Required Debian packages used by the scripts.

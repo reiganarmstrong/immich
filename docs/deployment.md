@@ -5,6 +5,9 @@ Ansible installs and validates the backup service on the Immich host. Keeping
 those responsibilities separate prevents a routine host deployment from
 silently changing or destroying recovery infrastructure.
 
+For a line-by-line explanation of the Ansible structure and task flow, see the
+[Ansible beginner's guide](ansible-guide.md).
+
 ## 1. Prerequisites
 
 On the Terraform/Ansible controller:
