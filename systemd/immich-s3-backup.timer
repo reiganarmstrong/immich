@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Immich S3 disaster-recovery backup nightly
+Documentation=file:/usr/local/share/doc/immich-s3-backup/docs/disaster-recovery.md
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 America/New_York
+Persistent=true
+WakeSystem=false
+AccuracySec=1min
+Unit=immich-s3-backup.service
+
+[Install]
+WantedBy=timers.target

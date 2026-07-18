@@ -1,0 +1,8 @@
+---
+- name: Deploy Immich S3 disaster-recovery backups
+  hosts: immich_hosts
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: immich_s3_backup

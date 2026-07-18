@@ -1,0 +1,9 @@
+# This bucket name must be globally unique.
+backup_bucket_name = "replace-with-a-globally-unique-immich-backup-bucket"
+
+aws_region = "us-east-1"
+
+tags = {
+  Environment = "production"
+  Owner       = "replace-me"
+}

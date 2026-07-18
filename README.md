@@ -16,6 +16,11 @@ with OpenVINO.
 | `.env` | Local runtime configuration, including the real database password. | No |
 | `library/` | Immich originals, uploads, thumbnails, profiles, encoded video, and backups. | No |
 | `postgres/` | Live PostgreSQL database files. | No |
+| `terraform/` | S3 recovery bucket, lifecycle, Object Lock, and backup IAM user. | Yes |
+| `ansible/` | Idempotent host deployment for scripts, configuration, credentials, and systemd. | Yes |
+| `scripts/` | S3 backup and staged-restore commands. | Yes |
+| `systemd/` | Persistent nightly backup service and timer templates. | Yes |
+| `docs/disaster-recovery.md` | Installation, monitoring, and recovery runbook. | Yes |
 
 The generated media and database directories are deliberately excluded from
 Git because they are large, host-specific runtime data. Back them up using a
@@ -65,9 +70,9 @@ Then reload the systemd configuration:
 sudo systemctl daemon-reload
 ```
 
-The override is stored outside this repository at
-`/etc/systemd/system/docker.service.d/override.conf` and prevents systemd from
-terminating Docker before the containers' graceful shutdown period completes.
+The Ansible deployment installs this setting as
+`/etc/systemd/system/docker.service.d/immich-backup-timeout.conf`. The manual
+override shown above remains appropriate when Ansible is not being used.
 
 ## Common operations
 
@@ -87,3 +92,23 @@ docker compose down
 ```
 
 Never commit `.env`, the contents of `library/`, or the contents of `postgres/`.
+
+## Disaster-recovery backups
+
+The deployment includes Terraform and host tooling for an off-site S3 backup:
+
+- Media is incrementally uploaded to Glacier Deep Archive and retained
+  indefinitely.
+- A new logical PostgreSQL dump is made before each media upload.
+- Daily database dumps remain online for 30 days; one monthly dump is retained
+  in Deep Archive for 365 days.
+- The service coordinates with this host's unattended upgrades and automatic
+  reboot policy through a persistent systemd timer.
+- The restricted backup IAM user cannot delete objects or bypass governance
+  retention.
+
+Start with the [end-to-end deployment guide](docs/deployment.md). Operational
+recovery procedures are in the
+[disaster-recovery runbook](docs/disaster-recovery.md). Component details are
+also available for [Terraform](terraform/README.md) and
+[Ansible](ansible/README.md).

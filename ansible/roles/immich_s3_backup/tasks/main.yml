@@ -1,0 +1,259 @@
+---
+- name: Validate deployment variables and target host
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family == "Debian"
+      - ansible_facts.service_mgr == "systemd"
+      - immich_s3_backup_s3_bucket | length >= 3
+      - immich_s3_backup_s3_bucket | length <= 63
+      - immich_s3_backup_s3_bucket is match('^[a-z0-9][a-z0-9.-]*[a-z0-9]$')
+      - "'replace-with' not in immich_s3_backup_s3_bucket"
+      - immich_s3_backup_aws_profile is match('^[A-Za-z0-9_.@+-]+$')
+      - immich_s3_backup_aws_region is match('^[a-z]{2}(-[a-z]+)+-[0-9]+$')
+      - immich_s3_backup_compose_dir is match('^/[A-Za-z0-9_./@+-]+$')
+      - immich_s3_backup_upload_location is match('^/[A-Za-z0-9_./@+-]+$')
+      - immich_s3_backup_state_dir is match('^/[A-Za-z0-9_./@+-]+$')
+      - immich_s3_backup_postgres_container is match('^[A-Za-z0-9_.-]+$')
+      - immich_s3_backup_db_name is match('^[A-Za-z0-9_.-]+$')
+      - immich_s3_backup_db_user is match('^[A-Za-z0-9_.-]+$')
+    fail_msg: >-
+      The target must be a Debian-family systemd host and all deployment
+      values must be set to safe, non-placeholder values.
+
+- name: Validate managed AWS credentials
+  ansible.builtin.assert:
+    that:
+      - immich_s3_backup_aws_access_key_id | length > 0
+      - immich_s3_backup_aws_secret_access_key | length > 0
+    fail_msg: >-
+      Set both AWS access-key variables in an encrypted vars.yml when
+      immich_s3_backup_manage_aws_credentials is true.
+  when: immich_s3_backup_manage_aws_credentials | bool
+  no_log: true
+
+- name: Install backup runtime packages
+  ansible.builtin.apt:
+    name: "{{ immich_s3_backup_required_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: immich_s3_backup_manage_packages | bool
+
+- name: Check externally managed commands
+  ansible.builtin.command:
+    argv:
+      - "{{ item.command }}"
+      - "{{ item.argument }}"
+  loop:
+    - command: aws
+      argument: --version
+    - command: docker
+      argument: --version
+    - command: systemd-inhibit
+      argument: --version
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Inspect required host paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ immich_s3_backup_compose_dir }}"
+    - "{{ immich_s3_backup_upload_location }}"
+  register: immich_s3_backup_host_paths
+
+- name: Require the Compose and upload directories
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isdir
+    fail_msg: "Required directory is missing: {{ item.item }}"
+  loop: "{{ immich_s3_backup_host_paths.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Check the PostgreSQL container exists
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - "{{ immich_s3_backup_postgres_container }}"
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Create backup directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ immich_s3_backup_state_dir }}"
+      mode: "0700"
+    - path: "{{ immich_s3_backup_documentation_dir }}"
+      mode: "0755"
+    - path: "{{ immich_s3_backup_documentation_dir }}/ansible"
+      mode: "0755"
+    - path: "{{ immich_s3_backup_documentation_dir }}/docs"
+      mode: "0755"
+    - path: "{{ immich_s3_backup_documentation_dir }}/terraform"
+      mode: "0755"
+
+- name: Install backup and restore commands
+  ansible.builtin.copy:
+    src: "{{ immich_s3_backup_repository_root }}/scripts/{{ item.source }}"
+    dest: "{{ immich_s3_backup_install_dir }}/{{ item.destination }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - source: immich-s3-backup.sh
+      destination: immich-s3-backup
+    - source: immich-s3-restore.sh
+      destination: immich-s3-restore
+
+- name: Install deployment and recovery documentation
+  ansible.builtin.copy:
+    src: "{{ immich_s3_backup_repository_root }}/{{ item.source }}"
+    dest: "{{ immich_s3_backup_documentation_dir }}/{{ item.destination }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - source: ansible/README.md
+      destination: ansible/README.md
+    - source: docs/deployment.md
+      destination: docs/deployment.md
+    - source: docs/ansible-guide.md
+      destination: docs/ansible-guide.md
+    - source: docs/disaster-recovery.md
+      destination: docs/disaster-recovery.md
+    - source: terraform/README.md
+      destination: terraform/README.md
+  when: not ansible_check_mode
+
+- name: Install dedicated AWS credentials
+  ansible.builtin.template:
+    src: aws-credentials.j2
+    dest: "{{ immich_s3_backup_credentials_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: immich_s3_backup_manage_aws_credentials | bool
+  no_log: true
+
+- name: Install backup configuration
+  ansible.builtin.template:
+    src: immich-s3-backup.env.j2
+    dest: "{{ immich_s3_backup_config_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Create the Docker service override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: immich_s3_backup_manage_docker_shutdown_timeout | bool
+
+- name: Install the Docker graceful-shutdown override
+  ansible.builtin.template:
+    src: docker-timeout.conf.j2
+    dest: /etc/systemd/system/docker.service.d/immich-backup-timeout.conf
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - immich_s3_backup_manage_docker_shutdown_timeout | bool
+    - not ansible_check_mode
+  notify: Reload systemd
+
+- name: Install backup systemd units
+  ansible.builtin.copy:
+    src: "{{ immich_s3_backup_repository_root }}/systemd/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - immich-s3-backup.service
+    - immich-s3-backup.timer
+  notify: Reload systemd
+
+- name: Apply systemd unit changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify installed systemd units
+  ansible.builtin.command:
+    argv:
+      - systemd-analyze
+      - verify
+      - /etc/systemd/system/immich-s3-backup.service
+      - /etc/systemd/system/immich-s3-backup.timer
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Validate the backup AWS identity
+  ansible.builtin.command:
+    argv:
+      - aws
+      - --profile
+      - "{{ immich_s3_backup_aws_profile }}"
+      - --region
+      - "{{ immich_s3_backup_aws_region }}"
+      - --no-cli-pager
+      - sts
+      - get-caller-identity
+  environment: >-
+    {{ {'AWS_SHARED_CREDENTIALS_FILE': immich_s3_backup_credentials_file}
+       if immich_s3_backup_manage_aws_credentials else {} }}
+  changed_when: false
+  no_log: true
+  when:
+    - immich_s3_backup_validate_aws_access | bool
+    - not ansible_check_mode
+
+- name: Validate access to the recovery bucket
+  ansible.builtin.command:
+    argv:
+      - aws
+      - --profile
+      - "{{ immich_s3_backup_aws_profile }}"
+      - --region
+      - "{{ immich_s3_backup_aws_region }}"
+      - --no-cli-pager
+      - s3api
+      - get-bucket-location
+      - --bucket
+      - "{{ immich_s3_backup_s3_bucket }}"
+  environment: >-
+    {{ {'AWS_SHARED_CREDENTIALS_FILE': immich_s3_backup_credentials_file}
+       if immich_s3_backup_manage_aws_credentials else {} }}
+  changed_when: false
+  no_log: true
+  when:
+    - immich_s3_backup_validate_aws_access | bool
+    - not ansible_check_mode
+
+- name: Exercise the backup workflow without uploading
+  ansible.builtin.command:
+    argv:
+      - "{{ immich_s3_backup_install_dir }}/immich-s3-backup"
+      - --config
+      - "{{ immich_s3_backup_config_file }}"
+      - --dry-run
+  changed_when: false
+  when:
+    - immich_s3_backup_run_backup_dry_run | bool
+    - not ansible_check_mode
+
+- name: Enable and start the backup timer
+  ansible.builtin.systemd_service:
+    name: immich-s3-backup.timer
+    enabled: "{{ immich_s3_backup_enable_timer }}"
+    state: "{{ 'started' if immich_s3_backup_enable_timer else 'stopped' }}"
+  when: not ansible_check_mode

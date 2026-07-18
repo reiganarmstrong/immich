@@ -1,0 +1,26 @@
+---
+# Copy this file to vars.yml. The real file is ignored by Git.
+immich_s3_backup_s3_bucket: replace-with-your-immich-recovery-bucket
+
+# Set this to true to have Ansible install a dedicated root-only credentials
+# file. Encrypt vars.yml with ansible-vault before retaining these values.
+immich_s3_backup_manage_aws_credentials: false
+immich_s3_backup_aws_access_key_id: ""
+immich_s3_backup_aws_secret_access_key: ""
+immich_s3_backup_aws_session_token: ""
+
+# Leave validation enabled so the timer is not activated with broken access.
+immich_s3_backup_validate_aws_access: true
+
+# Set true only when you want deployment to scan the media tree and exercise
+# the backup script with AWS CLI --dryrun semantics.
+immich_s3_backup_run_backup_dry_run: false
+
+# Host-specific values normally do not need changing on this deployment.
+immich_s3_backup_aws_profile: immich-backup
+immich_s3_backup_aws_region: us-east-1
+immich_s3_backup_compose_dir: /srv/immich
+immich_s3_backup_upload_location: /srv/immich/library
+immich_s3_backup_postgres_container: immich_postgres
+immich_s3_backup_db_name: immich
+immich_s3_backup_db_user: postgres
