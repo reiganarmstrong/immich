@@ -1,0 +1,15 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Immich-generated media and database data
+library/
+postgres/
+
+# Local tooling metadata
+.agents/
+.codex/
+
+# Runtime output
+*.log
