@@ -1,0 +1,6 @@
+# Copy to backend.hcl and replace the bucket name before terraform init.
+bucket       = "replace-with-your-private-terraform-state-bucket"
+encrypt      = true
+key          = "immich/terraform.tfstate"
+region       = "us-east-1"
+use_lockfile = true
