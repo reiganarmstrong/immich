@@ -32,6 +32,7 @@ terraform/*_override.tf.json
 restore-staging/
 
 # Ansible deployment-specific inventory, variables, and secrets
+/.ansible/
 ansible/inventory.yml
 ansible/vars.yml
 ansible/.vault-password
