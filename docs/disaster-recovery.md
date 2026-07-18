@@ -48,9 +48,10 @@ idle suspend. Historical logs do contain explicit suspend events through July
 
 ## Provision AWS infrastructure
 
-Follow [`terraform/README.md`](../terraform/README.md) to initialize the S3
-backend from the ignored local configuration, create the recovery bucket, and
-configure the dedicated root AWS profile.
+Follow the [end-to-end deployment guide](deployment.md) to initialize the S3
+backend from the ignored local configuration, create the recovery bucket and
+IAM user, create the access key, and deploy the host service with Ansible.
+Terraform-specific details are in [`terraform/README.md`](../terraform/README.md).
 
 The tracked backend example retains this state-key structure without exposing
 the private bucket name:
@@ -65,30 +66,24 @@ unique.
 
 ## Install the host service
 
-Copy and edit the service configuration:
+The supported installation path is the idempotent Ansible playbook. It
+installs root-owned copies of the scripts, configuration, optional Vault-backed
+AWS credentials, documentation, Docker shutdown override, and systemd units.
 
 ```sh
-sudo install -m 0600 \
-  /srv/immich/config/immich-s3-backup.env.example \
-  /etc/immich-s3-backup.env
-sudoedit /etc/immich-s3-backup.env
+cd /srv/immich
+cp ansible/inventory.example.yml ansible/inventory.yml
+cp ansible/vars.example.yml ansible/vars.yml
+$EDITOR ansible/inventory.yml ansible/vars.yml
+cd ansible
+ansible-playbook -i inventory.yml deploy.yml -e @vars.yml --ask-vault-pass
 ```
 
-Set `S3_BUCKET` to the Terraform output. Confirm the Compose path, upload path,
-database name, and database user match `/srv/immich/.env`. Do not put the
-PostgreSQL password or AWS access key in this file.
-
-Install and verify the systemd units:
-
-```sh
-sudo install -m 0644 /srv/immich/systemd/immich-s3-backup.service /etc/systemd/system/
-sudo install -m 0644 /srv/immich/systemd/immich-s3-backup.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemd-analyze verify \
-  /etc/systemd/system/immich-s3-backup.service \
-  /etc/systemd/system/immich-s3-backup.timer
-sudo systemctl enable --now immich-s3-backup.timer
-```
+Omit `--ask-vault-pass` for an unencrypted variables file. See
+[`ansible/README.md`](../ansible/README.md) for credential modes, previewing
+with check mode, and all available variables. Set the recovery bucket from the
+Terraform output and confirm the Compose path, upload path, container, database
+name, and database user match the live deployment.
 
 Inspect the effective schedule:
 
@@ -103,7 +98,7 @@ First run the non-mutating S3 dry run. It validates Docker, PostgreSQL, AWS
 identity, and bucket access, and asks the AWS CLI to show the media transfers:
 
 ```sh
-sudo /srv/immich/scripts/immich-s3-backup.sh \
+sudo /usr/local/sbin/immich-s3-backup \
   --config /etc/immich-s3-backup.env \
   --dry-run
 ```
@@ -126,7 +121,7 @@ daily success marker is written.
 Verify objects without retrieving archived media:
 
 ```sh
-sudo /srv/immich/scripts/immich-s3-restore.sh \
+sudo /usr/local/sbin/immich-s3-restore \
   --config /etc/immich-s3-backup.env \
   inventory
 ```
@@ -144,10 +139,10 @@ restore procedure.
 1. List available database points and media:
 
    ```sh
-   sudo /srv/immich/scripts/immich-s3-restore.sh \
+   sudo /usr/local/sbin/immich-s3-restore \
      --config /etc/immich-s3-backup.env \
      inventory database/
-   sudo /srv/immich/scripts/immich-s3-restore.sh \
+   sudo /usr/local/sbin/immich-s3-restore \
      --config /etc/immich-s3-backup.env \
      inventory media/
    ```
@@ -156,7 +151,7 @@ restore procedure.
    Standard when recovery time is more important:
 
    ```sh
-   sudo /srv/immich/scripts/immich-s3-restore.sh \
+   sudo /usr/local/sbin/immich-s3-restore \
      --config /etc/immich-s3-backup.env \
      request --tier Bulk media/
    ```
@@ -164,7 +159,7 @@ restore procedure.
    If using an archived monthly database point, request its prefix too:
 
    ```sh
-   sudo /srv/immich/scripts/immich-s3-restore.sh \
+   sudo /usr/local/sbin/immich-s3-restore \
      --config /etc/immich-s3-backup.env \
      request --tier Bulk database/monthly/
    ```
@@ -172,7 +167,7 @@ restore procedure.
 3. Monitor restoration:
 
    ```sh
-   sudo /srv/immich/scripts/immich-s3-restore.sh \
+   sudo /usr/local/sbin/immich-s3-restore \
      --config /etc/immich-s3-backup.env \
      status media/
    ```
@@ -181,7 +176,7 @@ restore procedure.
    Omitting the database key selects the newest daily dump:
 
    ```sh
-   sudo /srv/immich/scripts/immich-s3-restore.sh \
+   sudo /usr/local/sbin/immich-s3-restore \
      --config /etc/immich-s3-backup.env \
      download /srv/immich/restore-staging
    ```
@@ -205,14 +200,15 @@ restore procedure.
 Keep these outside both this repository and the recovery bucket:
 
 - The real `/srv/immich/.env` secrets in a password manager.
-- The backup IAM access key in a password manager and root's AWS profile.
+- The backup IAM access key in a password manager and either root's AWS
+  profile or the ignored, Vault-encrypted Ansible variables file.
 - AWS administrative recovery credentials that can run Terraform and initiate
   emergency retention changes.
 - Any future OAuth, SMTP, or external-library credentials.
 
-Git tracks the Compose configuration, scripts, Terraform, unit files, and safe
-configuration examples. The live PostgreSQL directory is never copied; only
-consistent logical dumps are uploaded.
+Git tracks the Compose configuration, scripts, Terraform, Ansible playbook,
+unit files, and safe configuration examples. The live PostgreSQL directory is
+never copied; only consistent logical dumps are uploaded.
 
 ## Ongoing checks
 

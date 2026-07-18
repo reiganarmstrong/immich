@@ -1,6 +1,6 @@
 [Unit]
 Description=Immich S3 disaster-recovery backup
-Documentation=file:/srv/immich/docs/disaster-recovery.md
+Documentation=file:/usr/local/share/doc/immich-s3-backup/docs/disaster-recovery.md
 Wants=network-online.target docker.service
 After=network-online.target docker.service apt-daily.service apt-daily-upgrade.service
 StartLimitIntervalSec=1h
@@ -13,7 +13,7 @@ User=root
 Group=root
 UMask=0077
 EnvironmentFile=/etc/immich-s3-backup.env
-ExecStart=/usr/bin/systemd-inhibit --what=shutdown:sleep --who=immich-s3-backup --why="Immich disaster-recovery backup" --mode=block /srv/immich/scripts/immich-s3-backup.sh --config /etc/immich-s3-backup.env
+ExecStart=/usr/bin/systemd-inhibit --what=shutdown:sleep --who=immich-s3-backup --why="Immich disaster-recovery backup" --mode=block /usr/local/sbin/immich-s3-backup --config /etc/immich-s3-backup.env
 Restart=on-failure
 RestartSec=15min
 TimeoutStartSec=infinity

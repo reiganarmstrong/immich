@@ -21,6 +21,7 @@ cat >"$CONFIG_FILE" <<EOF
 AWS_PROFILE=test-profile
 AWS_REGION=us-east-1
 S3_BUCKET=test-immich-backup
+AWS_SHARED_CREDENTIALS_FILE=$TEST_ROOT/aws-credentials
 COMPOSE_DIR=$REPOSITORY_ROOT
 UPLOAD_LOCATION=$UPLOAD_DIR
 POSTGRES_CONTAINER=immich_postgres
@@ -36,6 +37,7 @@ cat >"$BIN_DIR/aws" <<'EOF'
 #!/usr/bin/env bash
 set -u
 printf '%s\n' "$*" >>"$MOCK_AWS_LOG"
+printf 'credentials=%s\n' "${AWS_SHARED_CREDENTIALS_FILE:-}" >>"$MOCK_AWS_LOG"
 
 case " $* " in
   *" s3api head-object "*)
@@ -137,6 +139,7 @@ assert_order() {
 printf '%s\n' 'Test: successful database-first backup'
 "$REPOSITORY_ROOT/scripts/immich-s3-backup.sh" --config "$CONFIG_FILE" >/dev/null
 assert_contains "$AWS_LOG" "s3api put-object --bucket test-immich-backup --key database/daily/"
+assert_contains "$AWS_LOG" "credentials=$TEST_ROOT/aws-credentials"
 assert_contains "$AWS_LOG" "--storage-class STANDARD"
 assert_contains "$AWS_LOG" "s3api put-object --bucket test-immich-backup --key database/monthly/"
 assert_contains "$AWS_LOG" "--storage-class DEEP_ARCHIVE"
@@ -213,5 +216,11 @@ assert_contains "$REPOSITORY_ROOT/systemd/immich-s3-backup.timer" "WakeSystem=fa
 assert_contains "$REPOSITORY_ROOT/systemd/immich-s3-backup.service" "--what=shutdown:sleep"
 assert_contains "$REPOSITORY_ROOT/systemd/immich-s3-backup.service" "RestartSec=15min"
 assert_contains "$REPOSITORY_ROOT/systemd/immich-s3-backup.service" "StartLimitBurst=4"
+assert_contains "$REPOSITORY_ROOT/systemd/immich-s3-backup.service" "/usr/local/sbin/immich-s3-backup"
+
+printf '%s\n' 'Test: Ansible keeps deployment secrets local and root-owned'
+assert_contains "$REPOSITORY_ROOT/.gitignore" "ansible/vars.yml"
+assert_contains "$REPOSITORY_ROOT/ansible/roles/immich_s3_backup/tasks/main.yml" "mode: \"0600\""
+assert_contains "$REPOSITORY_ROOT/ansible/roles/immich_s3_backup/tasks/main.yml" "no_log: true"
 
 printf '%s\n' 'All backup and restore script tests passed.'

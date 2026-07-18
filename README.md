@@ -17,6 +17,7 @@ with OpenVINO.
 | `library/` | Immich originals, uploads, thumbnails, profiles, encoded video, and backups. | No |
 | `postgres/` | Live PostgreSQL database files. | No |
 | `terraform/` | S3 recovery bucket, lifecycle, Object Lock, and backup IAM user. | Yes |
+| `ansible/` | Idempotent host deployment for scripts, configuration, credentials, and systemd. | Yes |
 | `scripts/` | S3 backup and staged-restore commands. | Yes |
 | `systemd/` | Persistent nightly backup service and timer templates. | Yes |
 | `docs/disaster-recovery.md` | Installation, monitoring, and recovery runbook. | Yes |
@@ -69,9 +70,9 @@ Then reload the systemd configuration:
 sudo systemctl daemon-reload
 ```
 
-The override is stored outside this repository at
-`/etc/systemd/system/docker.service.d/override.conf` and prevents systemd from
-terminating Docker before the containers' graceful shutdown period completes.
+The Ansible deployment installs this setting as
+`/etc/systemd/system/docker.service.d/immich-backup-timeout.conf`. The manual
+override shown above remains appropriate when Ansible is not being used.
 
 ## Common operations
 
@@ -106,5 +107,8 @@ The deployment includes Terraform and host tooling for an off-site S3 backup:
 - The restricted backup IAM user cannot delete objects or bypass governance
   retention.
 
-Start with the [disaster-recovery runbook](docs/disaster-recovery.md). Terraform
-provisioning details are in [`terraform/README.md`](terraform/README.md).
+Start with the [end-to-end deployment guide](docs/deployment.md). Operational
+recovery procedures are in the
+[disaster-recovery runbook](docs/disaster-recovery.md). Component details are
+also available for [Terraform](terraform/README.md) and
+[Ansible](ansible/README.md).

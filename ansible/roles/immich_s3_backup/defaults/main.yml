@@ -1,0 +1,44 @@
+---
+immich_s3_backup_repository_root: "{{ playbook_dir | dirname }}"
+
+immich_s3_backup_aws_profile: immich-backup
+immich_s3_backup_aws_region: us-east-1
+immich_s3_backup_s3_bucket: ""
+
+immich_s3_backup_compose_dir: /srv/immich
+immich_s3_backup_upload_location: /srv/immich/library
+immich_s3_backup_postgres_container: immich_postgres
+immich_s3_backup_db_name: immich
+immich_s3_backup_db_user: postgres
+
+immich_s3_backup_timezone: America/New_York
+immich_s3_backup_state_dir: /var/lib/immich-s3-backup
+immich_s3_backup_apt_wait_timeout_seconds: 7200
+immich_s3_backup_postgres_wait_timeout_seconds: 900
+
+immich_s3_backup_config_file: /etc/immich-s3-backup.env
+immich_s3_backup_credentials_file: /etc/immich-s3-backup.aws-credentials
+immich_s3_backup_install_dir: /usr/local/sbin
+immich_s3_backup_documentation_dir: /usr/local/share/doc/immich-s3-backup
+
+immich_s3_backup_manage_aws_credentials: false
+immich_s3_backup_aws_access_key_id: ""
+immich_s3_backup_aws_secret_access_key: ""
+immich_s3_backup_aws_session_token: ""
+
+immich_s3_backup_manage_packages: true
+immich_s3_backup_required_packages:
+  - ca-certificates
+  - findutils
+  - git
+  - gzip
+  - jq
+  - psmisc
+  - python3-apt
+  - util-linux
+
+immich_s3_backup_manage_docker_shutdown_timeout: true
+immich_s3_backup_docker_shutdown_timeout: 15min
+immich_s3_backup_enable_timer: true
+immich_s3_backup_validate_aws_access: true
+immich_s3_backup_run_backup_dry_run: false

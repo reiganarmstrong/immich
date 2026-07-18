@@ -70,5 +70,6 @@ Store the access key in a password manager as a recovery copy. The IAM user can
 upload and restore objects, but cannot delete them or bypass governance
 retention.
 
-For host installation and recovery procedures, see
+For the complete Terraform-to-host installation sequence, see
+[`docs/deployment.md`](../docs/deployment.md). Recovery procedures are in
 [`docs/disaster-recovery.md`](../docs/disaster-recovery.md).
