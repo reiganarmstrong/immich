@@ -13,3 +13,20 @@ postgres/
 
 # Runtime output
 *.log
+
+# Terraform local state, plans, and deployment-specific values
+terraform/.terraform/
+terraform/backend.hcl
+terraform/*.tfplan
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+terraform/crash.log
+terraform/override.tf
+terraform/override.tf.json
+terraform/*_override.tf
+terraform/*_override.tf.json
+
+# Backup runtime and restore staging data
+.backup-state/
+restore-staging/
