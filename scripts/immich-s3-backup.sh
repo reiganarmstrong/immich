@@ -57,6 +57,12 @@ source "$CONFIG_FILE"
 : "${DB_DATABASE_NAME:?DB_DATABASE_NAME is required}"
 : "${DB_USERNAME:?DB_USERNAME is required}"
 
+# These optional AWS SDK variables can be supplied by the Ansible-managed
+# configuration. Export them because this file is also sourced during manual
+# invocations outside systemd.
+[[ -z "${AWS_SHARED_CREDENTIALS_FILE:-}" ]] || export AWS_SHARED_CREDENTIALS_FILE
+[[ -z "${AWS_CONFIG_FILE:-}" ]] || export AWS_CONFIG_FILE
+
 BACKUP_TIMEZONE=${BACKUP_TIMEZONE:-America/New_York}
 STATE_DIR=${STATE_DIR:-/var/lib/immich-s3-backup}
 APT_WAIT_TIMEOUT_SECONDS=${APT_WAIT_TIMEOUT_SECONDS:-7200}

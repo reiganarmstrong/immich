@@ -53,6 +53,9 @@ source "$CONFIG_FILE"
 : "${AWS_REGION:?AWS_REGION is required}"
 : "${S3_BUCKET:?S3_BUCKET is required}"
 
+[[ -z "${AWS_SHARED_CREDENTIALS_FILE:-}" ]] || export AWS_SHARED_CREDENTIALS_FILE
+[[ -z "${AWS_CONFIG_FILE:-}" ]] || export AWS_CONFIG_FILE
+
 for command_name in aws base64 find jq mkdir; do
   command -v "$command_name" >/dev/null 2>&1 || die "required command is missing: $command_name"
 done
