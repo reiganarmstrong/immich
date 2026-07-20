@@ -157,6 +157,18 @@ resource "aws_iam_user" "backup" {
 
 data "aws_iam_policy_document" "backup" {
   statement {
+    sid    = "DenyCloudWatchUsage"
+    effect = "Deny"
+
+    actions = [
+      "cloudwatch:*",
+      "logs:*",
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
     sid = "ListBackupBucket"
 
     actions = [

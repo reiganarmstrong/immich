@@ -68,7 +68,10 @@ sudo aws sts get-caller-identity --profile immich-backup
 
 Store the access key in a password manager as a recovery copy. The IAM user can
 upload and restore objects, but cannot delete them or bypass governance
-retention.
+retention. Its policy also explicitly denies CloudWatch Logs and CloudWatch
+metrics API access so that an additional allow policy cannot make the backup
+identity generate CloudWatch charges. This stack does not enable paid S3
+request metrics or create any CloudWatch resources.
 
 For the complete Terraform-to-host installation sequence, see
 [`docs/deployment.md`](../docs/deployment.md). Recovery procedures are in
