@@ -43,7 +43,19 @@ separate backup process.
    docker compose up -d
    ```
 
-4. Open `http://<server-address>:2283` to finish setup.
+4. Configure the host-local HTTPS proxy:
+
+   ```sh
+   sudo tailscale serve --bg --https=8443 http://127.0.0.1:2283
+   ```
+
+5. Open `https://pc.<tailnet>.ts.net:8443` to finish setup. In Immich,
+   set **Administration → Settings → Server Settings → External Domain** to
+   the same URL without a trailing slash.
+
+The cleartext Immich port binds only to `127.0.0.1`; it is unavailable from
+the LAN or tailnet except through the private Tailscale Serve HTTPS endpoint.
+Do not enable Tailscale Funnel.
 
 ### Docker shutdown timeout
 

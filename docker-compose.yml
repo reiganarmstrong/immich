@@ -25,7 +25,8 @@ services:
       - .env
 
     ports:
-      - "2283:2283"
+      # Cleartext backend for the host-local Tailscale Serve HTTPS proxy.
+      - "127.0.0.1:2283:2283"
 
     depends_on:
       - redis
