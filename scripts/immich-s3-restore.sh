@@ -14,9 +14,9 @@ Usage:
 
 Commands:
   inventory  List current objects and their storage classes.
-  request    Initiate restore requests for archived objects (default: media/).
-  status     Show archive restore status (default: media/).
-  download   Download restored media plus a selected or latest daily DB dump.
+  request    Initiate restore requests (default: critical media prefixes).
+  status     Show archive restore status (default: critical media prefixes).
+  download   Download critical media plus a selected or latest daily DB dump.
 
 The download destination must be empty. This script never writes to the live
 Immich upload root automatically.
@@ -68,6 +68,7 @@ done
 command_name=$1
 shift
 aws_cli=(aws --profile "$AWS_PROFILE" --region "$AWS_REGION" --no-cli-pager)
+critical_media_prefixes=(media/library/ media/upload/ media/profile/)
 
 list_objects() {
   local prefix=$1
@@ -89,47 +90,58 @@ case "$command_name" in
       shift 2
     fi
     [[ "$tier" == "Bulk" || "$tier" == "Standard" ]] || die "tier must be Bulk or Standard"
-    prefix=${1:-media/}
-    object_list=$(list_objects "$prefix")
-
+    if (($# > 0)); then
+      request_prefixes=("$1")
+    else
+      request_prefixes=("${critical_media_prefixes[@]}")
+    fi
     requested=0
-    while IFS= read -r encoded_key; do
-      [[ -n "$encoded_key" ]] || continue
-      key=$(printf '%s' "$encoded_key" | base64 --decode)
-      if output=$("${aws_cli[@]}" s3api restore-object \
-        --bucket "$S3_BUCKET" \
-        --key "$key" \
-        --restore-request "{\"Days\":7,\"GlacierJobParameters\":{\"Tier\":\"$tier\"}}" 2>&1); then
-        printf 'requested\t%s\n' "$key"
-      elif [[ "$output" == *RestoreAlreadyInProgress* || "$output" == *ObjectAlreadyInActiveTierError* ]]; then
-        printf 'already-active\t%s\n' "$key"
-      else
-        printf '%s\n' "$output" >&2
-        die "restore request failed for $key"
-      fi
-      ((requested += 1))
-    done < <(jq -r '.Contents[]? | select(.StorageClass == "DEEP_ARCHIVE" or .StorageClass == "GLACIER") | .Key | @base64' <<<"$object_list")
-    printf 'Processed %d archived objects under %s\n' "$requested" "$prefix"
+    for prefix in "${request_prefixes[@]}"; do
+      object_list=$(list_objects "$prefix")
+      while IFS= read -r encoded_key; do
+        [[ -n "$encoded_key" ]] || continue
+        key=$(printf '%s' "$encoded_key" | base64 --decode)
+        if output=$("${aws_cli[@]}" s3api restore-object \
+          --bucket "$S3_BUCKET" \
+          --key "$key" \
+          --restore-request "{\"Days\":7,\"GlacierJobParameters\":{\"Tier\":\"$tier\"}}" 2>&1); then
+          printf 'requested\t%s\n' "$key"
+        elif [[ "$output" == *RestoreAlreadyInProgress* || "$output" == *ObjectAlreadyInActiveTierError* ]]; then
+          printf 'already-active\t%s\n' "$key"
+        else
+          printf '%s\n' "$output" >&2
+          die "restore request failed for $key"
+        fi
+        ((requested += 1))
+      done < <(jq -r '.Contents[]? | select(.StorageClass == "DEEP_ARCHIVE" or .StorageClass == "GLACIER") | .Key | @base64' <<<"$object_list")
+    done
+    printf 'Processed %d archived objects\n' "$requested"
     ;;
 
   status)
-    prefix=${1:-media/}
-    object_list=$(list_objects "$prefix")
-    while IFS= read -r encoded_key; do
-      [[ -n "$encoded_key" ]] || continue
-      key=$(printf '%s' "$encoded_key" | base64 --decode)
-      restore=$("${aws_cli[@]}" s3api head-object \
-        --bucket "$S3_BUCKET" \
-        --key "$key" \
-        --query 'Restore' \
-        --output text 2>/dev/null || true)
-      case "$restore" in
-        *'ongoing-request="false"'*) state=ready ;;
-        *'ongoing-request="true"'*) state=in-progress ;;
-        *) state=not-requested ;;
-      esac
-      printf '%s\t%s\n' "$state" "$key"
-    done < <(jq -r '.Contents[]? | select(.StorageClass == "DEEP_ARCHIVE" or .StorageClass == "GLACIER") | .Key | @base64' <<<"$object_list")
+    if (($# > 0)); then
+      status_prefixes=("$1")
+    else
+      status_prefixes=("${critical_media_prefixes[@]}")
+    fi
+    for prefix in "${status_prefixes[@]}"; do
+      object_list=$(list_objects "$prefix")
+      while IFS= read -r encoded_key; do
+        [[ -n "$encoded_key" ]] || continue
+        key=$(printf '%s' "$encoded_key" | base64 --decode)
+        restore=$("${aws_cli[@]}" s3api head-object \
+          --bucket "$S3_BUCKET" \
+          --key "$key" \
+          --query 'Restore' \
+          --output text 2>/dev/null || true)
+        case "$restore" in
+          *'ongoing-request="false"'*) state=ready ;;
+          *'ongoing-request="true"'*) state=in-progress ;;
+          *) state=not-requested ;;
+        esac
+        printf '%s\t%s\n' "$state" "$key"
+      done < <(jq -r '.Contents[]? | select(.StorageClass == "DEEP_ARCHIVE" or .StorageClass == "GLACIER") | .Key | @base64' <<<"$object_list")
+    done
     ;;
 
   download)
@@ -155,6 +167,10 @@ case "$command_name" in
     "${aws_cli[@]}" s3 sync \
       "s3://$S3_BUCKET/media/" \
       "$destination/" \
+      --exclude "*" \
+      --include "library/*" \
+      --include "upload/*" \
+      --include "profile/*" \
       --force-glacier-transfer \
       --only-show-errors
 

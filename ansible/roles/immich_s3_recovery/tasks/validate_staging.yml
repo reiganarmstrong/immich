@@ -1,0 +1,47 @@
+---
+- name: Inspect staged critical media directories
+  ansible.builtin.stat:
+    path: "{{ immich_s3_recovery_staging_dir }}/{{ item }}"
+  loop:
+    - library
+    - upload
+    - profile
+  register: immich_s3_recovery_critical_directories
+
+- name: Require every critical media directory
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isdir
+    fail_msg: "Critical recovery directory is missing: {{ item.item }}"
+  loop: "{{ immich_s3_recovery_critical_directories.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Find the staged database dump
+  ansible.builtin.find:
+    paths: "{{ immich_s3_recovery_staging_dir }}/backups"
+    patterns: "*.sql.gz"
+    file_type: file
+    recurse: false
+  register: immich_s3_recovery_database_dumps
+
+- name: Require exactly one staged database dump
+  ansible.builtin.assert:
+    that:
+      - immich_s3_recovery_database_dumps.matched == 1
+    fail_msg: >-
+      Expected exactly one .sql.gz dump under
+      {{ immich_s3_recovery_staging_dir }}/backups.
+
+- name: Remember the staged database dump
+  ansible.builtin.set_fact:
+    immich_s3_recovery_dump_file: "{{ immich_s3_recovery_database_dumps.files[0].path }}"
+
+- name: Validate the staged gzip stream
+  ansible.builtin.command:
+    argv:
+      - gzip
+      - --test
+      - "{{ immich_s3_recovery_dump_file }}"
+  changed_when: false

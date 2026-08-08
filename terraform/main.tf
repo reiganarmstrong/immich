@@ -125,6 +125,40 @@ resource "aws_s3_bucket_lifecycle_configuration" "backup" {
   }
 
   rule {
+    id     = "remove-generated-thumbnails"
+    status = "Enabled"
+
+    filter {
+      prefix = "media/thumbs/"
+    }
+
+    expiration {
+      days = 365
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+  }
+
+  rule {
+    id     = "remove-generated-video-encodes"
+    status = "Enabled"
+
+    filter {
+      prefix = "media/encoded-video/"
+    }
+
+    expiration {
+      days = 365
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+  }
+
+  rule {
     id     = "abort-incomplete-multipart-uploads"
     status = "Enabled"
 

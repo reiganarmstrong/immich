@@ -40,20 +40,34 @@ inventory example. They could be different machines later.
 ansible/
 ├── ansible.cfg
 ├── deploy.yml
+├── recover.yml
 ├── inventory.example.yml
 ├── vars.example.yml
 └── roles/
-    └── immich_s3_backup/
+    ├── immich_s3_backup/
+    │   ├── defaults/
+    │   │   └── main.yml
+    │   ├── handlers/
+    │   │   └── main.yml
+    │   ├── tasks/
+    │   │   └── main.yml
+    │   └── templates/
+    │       ├── aws-credentials.j2
+    │       ├── docker-timeout.conf.j2
+    │       └── immich-s3-backup.env.j2
+    └── immich_s3_recovery/
         ├── defaults/
         │   └── main.yml
-        ├── handlers/
-        │   └── main.yml
-        ├── tasks/
-        │   └── main.yml
-        └── templates/
-            ├── aws-credentials.j2
-            ├── docker-timeout.conf.j2
-            └── immich-s3-backup.env.j2
+        └── tasks/
+            ├── main.yml
+            ├── inventory.yml
+            ├── request.yml
+            ├── status.yml
+            ├── download.yml
+            ├── apply.yml
+            ├── regenerate.yml
+            ├── finalize.yml
+            └── validate_staging.yml
 ```
 
 The files form a chain:
@@ -80,6 +94,10 @@ templates/*.j2
 handlers/main.yml
     reloads systemd if relevant files changed
 ```
+
+`recover.yml` follows the same inventory and variable chain but invokes
+`immich_s3_recovery`. Its selected phase performs one bounded part of recovery
+so an archive wait never leaves a playbook running for two days.
 
 ## YAML basics used here
 
@@ -221,6 +239,12 @@ Line by line:
 The playbook intentionally stays small. The reusable and testable details live
 inside the role.
 
+`recover.yml` has the same play structure but invokes `immich_s3_recovery`.
+That role supports `inventory`, `request`, `status`, `download`, `apply`,
+`regenerate`, and `finalize`. The apply and finalize phases have independent
+confirmation variables so a default invocation cannot replace PostgreSQL or
+resume backups.
+
 ## What an Ansible role is
 
 A role is a conventional directory structure for one responsibility. Ansible
@@ -231,9 +255,9 @@ automatically recognizes files such as:
 - `handlers/main.yml` for actions triggered only by changes.
 - `templates/` for Jinja templates.
 
-The role name is `immich_s3_backup`, so its variables use the
-`immich_s3_backup_` prefix. The long prefix prevents collisions with variables
-from other roles.
+The deployment role is `immich_s3_backup`, so its variables use the
+`immich_s3_backup_` prefix. Recovery variables use
+`immich_s3_recovery_`. The long prefixes prevent collisions between roles.
 
 ## Role defaults: the baseline configuration
 
@@ -498,9 +522,9 @@ only root to modify them.
 
 ### 8. Install the commands
 
-The `ansible.builtin.copy` module copies the tracked shell scripts from the
-controller into `/usr/local/sbin` on the target. The `.sh` suffix is removed
-from the installed command names.
+The `ansible.builtin.copy` module copies the tracked backup, restore, and
+generated-asset pruning scripts from the controller into `/usr/local/sbin` on
+the target. The `.sh` suffix is removed from the installed command names.
 
 Mode `0755` makes the scripts executable. Ansible compares content and copies
 only when necessary.
@@ -764,6 +788,18 @@ ansible-playbook -i inventory.yml deploy.yml -e @vars.yml -vv
 Avoid very high verbosity around secret-bearing workflows unless needed, even
 though the sensitive tasks use `no_log`.
 
+Recovery uses the same inventory and variables:
+
+```sh
+ansible-playbook -i inventory.yml recover.yml -e @vars.yml \
+  -e immich_s3_recovery_phase=inventory
+```
+
+The phases and required operator decisions are documented in
+[`recovery-manual-steps.md`](recovery-manual-steps.md). In particular, do not
+store `immich_s3_recovery_confirm_apply: true` in `vars.yml`; approval belongs
+on the one command that performs the reviewed cutover.
+
 ## What happens after Ansible finishes
 
 Ansible exits. Systemd then owns routine operation:
@@ -796,7 +832,9 @@ It helps to remember which tool owns which layer:
 | Secret storage at rest | Password manager and optionally Ansible Vault |
 | Packages, installed scripts, configuration, units | Ansible |
 | Nightly scheduling and retries | systemd |
-| Database dump and S3 transfers | Shell backup script and AWS CLI |
+| Database dump and critical-media S3 transfers | Shell backup script and AWS CLI |
+| Staged recovery and PostgreSQL restoration | Recovery Ansible role |
+| Generated-asset cleanup after 180 days | Reviewed admin cleanup command |
 | Immich application runtime | Docker Compose |
 
 This separation is intentional. Rerunning a host deployment cannot silently

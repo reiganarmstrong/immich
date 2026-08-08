@@ -1,0 +1,41 @@
+---
+- name: Require an API key authorized to create jobs
+  ansible.builtin.assert:
+    that:
+      - immich_s3_recovery_api_key | length > 0
+    fail_msg: >-
+      Set immich_s3_recovery_api_key to a restored admin API key with
+      job.create permission, preferably through Ansible Vault.
+  no_log: true
+
+- name: Wait for the restored Immich API
+  ansible.builtin.uri:
+    url: "{{ immich_s3_recovery_api_url }}/server/ping"
+    method: GET
+    status_code: 200
+  register: immich_s3_recovery_api_ping
+  until: immich_s3_recovery_api_ping.status == 200
+  retries: "{{ (immich_s3_recovery_api_start_timeout_seconds / 5) | int }}"
+  delay: 5
+
+- name: Queue regeneration of omitted generated assets
+  ansible.builtin.uri:
+    url: "{{ immich_s3_recovery_api_url }}/jobs/{{ item }}"
+    method: PUT
+    headers:
+      x-api-key: "{{ immich_s3_recovery_api_key }}"
+    body_format: json
+    body:
+      command: start
+      force: true
+    status_code: 200
+  loop:
+    - thumbnailGeneration
+    - videoConversion
+  no_log: true
+
+- name: Report queued regeneration jobs
+  ansible.builtin.debug:
+    msg: >-
+      Immich accepted full thumbnail-generation and video-transcoding jobs.
+      Monitor Administration > Jobs before declaring recovery complete.

@@ -109,8 +109,8 @@ Never commit `.env`, the contents of `library/`, or the contents of `postgres/`.
 
 The deployment includes Terraform and host tooling for an off-site S3 backup:
 
-- Media is incrementally uploaded to Glacier Deep Archive and retained
-  indefinitely.
+- Critical media (`library`, `upload`, and `profile`) is incrementally uploaded
+  to Glacier Deep Archive and retained indefinitely.
 - A new logical PostgreSQL dump is made before each media upload.
 - Daily database dumps remain online for 30 days; one monthly dump is retained
   in Deep Archive for 365 days.

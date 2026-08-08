@@ -1,0 +1,36 @@
+---
+- name: Request restoration of critical archived media
+  ansible.builtin.command:
+    argv:
+      - "{{ immich_s3_recovery_restore_command }}"
+      - --config
+      - "{{ immich_s3_recovery_config_file }}"
+      - request
+      - --tier
+      - "{{ immich_s3_recovery_restore_tier }}"
+  register: immich_s3_recovery_media_request
+  changed_when: >-
+    immich_s3_recovery_media_request.stdout_lines
+    | select('match', '^requested') | list | length > 0
+
+- name: Request restoration of the selected archived database point
+  ansible.builtin.command:
+    argv:
+      - "{{ immich_s3_recovery_restore_command }}"
+      - --config
+      - "{{ immich_s3_recovery_config_file }}"
+      - request
+      - --tier
+      - "{{ immich_s3_recovery_restore_tier }}"
+      - "{{ immich_s3_recovery_database_key }}"
+  register: immich_s3_recovery_database_request
+  changed_when: >-
+    immich_s3_recovery_database_request.stdout_lines
+    | select('match', '^requested') | list | length > 0
+  when: immich_s3_recovery_database_key.startswith('database/monthly/')
+
+- name: Report archive request results
+  ansible.builtin.debug:
+    msg: >-
+      Archive requests were submitted. Run the status phase until every media
+      object and any selected monthly database object reports ready.

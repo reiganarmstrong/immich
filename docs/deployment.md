@@ -22,7 +22,8 @@ On the Immich host:
 
 - A running Docker-based Immich deployment.
 - AWS CLI v2 and Python 3.
-- The complete upload root at `/srv/immich/library` by default.
+- The upload root at `/srv/immich/library` by default, including the critical
+  `library`, `upload`, and `profile` directories.
 - A PostgreSQL container named `immich_postgres` by default.
 
 The playbook installs ordinary script dependencies, but it does not install or

@@ -1,0 +1,47 @@
+---
+- name: Validate the requested recovery phase
+  ansible.builtin.assert:
+    that:
+      - immich_s3_recovery_phase in ['inventory', 'request', 'status', 'download', 'apply', 'regenerate', 'finalize']
+      - immich_s3_recovery_restore_tier in ['Bulk', 'Standard']
+      - immich_s3_recovery_staging_dir is match('^/')
+      - immich_s3_recovery_upload_location is match('^/')
+      - immich_s3_recovery_db_data_location is match('^/')
+    fail_msg: >-
+      Choose inventory, request, status, download, apply, regenerate, or
+      finalize and use absolute recovery paths.
+
+- name: Inspect the installed restore command
+  ansible.builtin.stat:
+    path: "{{ immich_s3_recovery_restore_command }}"
+  register: immich_s3_recovery_restore_command_stat
+
+- name: Require the installed restore command
+  ansible.builtin.assert:
+    that:
+      - immich_s3_recovery_restore_command_stat.stat.exists
+      - >-
+        immich_s3_recovery_restore_command_stat.stat.isreg
+        or immich_s3_recovery_restore_command_stat.stat.islnk
+      - immich_s3_recovery_restore_command_stat.stat.executable
+    fail_msg: >-
+      Run deploy.yml first; the recovery command is missing or not executable:
+      {{ immich_s3_recovery_restore_command }}
+
+- name: Inspect the installed recovery configuration
+  ansible.builtin.stat:
+    path: "{{ immich_s3_recovery_config_file }}"
+  register: immich_s3_recovery_config_stat
+
+- name: Require the installed recovery configuration
+  ansible.builtin.assert:
+    that:
+      - immich_s3_recovery_config_stat.stat.exists
+      - immich_s3_recovery_config_stat.stat.isreg
+      - immich_s3_recovery_config_stat.stat.readable
+    fail_msg: >-
+      Run deploy.yml first; the recovery configuration is missing or
+      unreadable: {{ immich_s3_recovery_config_file }}
+
+- name: Run the requested recovery phase
+  ansible.builtin.include_tasks: "{{ immich_s3_recovery_phase }}.yml"

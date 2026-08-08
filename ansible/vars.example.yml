@@ -24,3 +24,13 @@ immich_s3_backup_upload_location: /srv/immich/library
 immich_s3_backup_postgres_container: immich_postgres
 immich_s3_backup_db_name: immich
 immich_s3_backup_db_user: postgres
+
+# Recovery defaults. The playbook is phase-based because Deep Archive restore
+# requests are asynchronous. Never store confirm_apply=true in this file.
+immich_s3_recovery_staging_dir: /srv/immich/restore-staging
+immich_s3_recovery_db_data_location: /srv/immich/postgres
+immich_s3_recovery_preserve_existing_data: true
+
+# Retain an admin API key with job.create permission outside the recovery
+# bucket. Put it here only when vars.yml is protected with Ansible Vault.
+immich_s3_recovery_api_key: ""

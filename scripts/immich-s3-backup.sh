@@ -204,13 +204,15 @@ else
   monthly_created=true
 fi
 
-log "Incrementally syncing Immich files to Deep Archive"
+log "Incrementally syncing critical Immich files to Deep Archive"
 sync_args=(
   s3 sync
   "$UPLOAD_LOCATION/"
   "s3://$S3_BUCKET/media/"
-  --exclude "backups/*"
-  --include "backups/.immich"
+  --exclude "*"
+  --include "library/*"
+  --include "upload/*"
+  --include "profile/*"
   --storage-class DEEP_ARCHIVE
   --sse AES256
   --checksum-algorithm SHA256
@@ -238,7 +240,7 @@ jq -n \
   --argjson dump_size "$dump_size" \
   --argjson monthly_created "$monthly_created" \
   '{
-    schema_version: 1,
+    schema_version: 2,
     completed_at: $completed_at,
     backup_date: $local_date,
     timezone: $timezone,
@@ -248,7 +250,12 @@ jq -n \
       monthly_created: $monthly_created,
       compressed_bytes: $dump_size
     },
-    media_prefix: "media/",
+    media: {
+      prefix: "media/",
+      policy: "critical-only-v1",
+      critical_paths: ["library/", "upload/", "profile/"],
+      recreated_paths: ["backups/", "thumbs/", "encoded-video/"]
+    },
     immich_image: $immich_image,
     git_revision: $git_revision
   }' >"$manifest_file"

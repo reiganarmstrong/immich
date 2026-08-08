@@ -1,0 +1,70 @@
+---
+- name: Create the empty recovery staging directory
+  ansible.builtin.file:
+    path: "{{ immich_s3_recovery_staging_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Download critical media and the latest daily database point
+  ansible.builtin.command:
+    argv:
+      - "{{ immich_s3_recovery_restore_command }}"
+      - --config
+      - "{{ immich_s3_recovery_config_file }}"
+      - download
+      - "{{ immich_s3_recovery_staging_dir }}"
+  when: immich_s3_recovery_database_key | length == 0
+  changed_when: true
+
+- name: Download critical media and the selected database point
+  ansible.builtin.command:
+    argv:
+      - "{{ immich_s3_recovery_restore_command }}"
+      - --config
+      - "{{ immich_s3_recovery_config_file }}"
+      - download
+      - "{{ immich_s3_recovery_staging_dir }}"
+      - "{{ immich_s3_recovery_database_key }}"
+  when: immich_s3_recovery_database_key | length > 0
+  changed_when: true
+
+- name: Create generated-content and backup marker directories
+  ansible.builtin.file:
+    path: "{{ immich_s3_recovery_staging_dir }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - backups
+    - encoded-video
+    - thumbs
+
+- name: Ensure every Immich storage marker is present
+  ansible.builtin.file:
+    path: "{{ immich_s3_recovery_staging_dir }}/{{ item }}/.immich"
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+    modification_time: preserve
+    access_time: preserve
+  loop:
+    - backups
+    - encoded-video
+    - library
+    - profile
+    - thumbs
+    - upload
+
+- name: Validate staged recovery data
+  ansible.builtin.include_tasks: validate_staging.yml
+
+- name: Report the validated staging location
+  ansible.builtin.debug:
+    msg: >-
+      Critical media and {{ immich_s3_recovery_dump_file }} are validated under
+      {{ immich_s3_recovery_staging_dir }}. Review them before running the
+      explicitly destructive apply phase.
