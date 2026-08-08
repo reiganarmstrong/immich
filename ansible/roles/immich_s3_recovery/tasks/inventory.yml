@@ -1,0 +1,34 @@
+---
+- name: List available database recovery points
+  ansible.builtin.command:
+    argv:
+      - "{{ immich_s3_recovery_restore_command }}"
+      - --config
+      - "{{ immich_s3_recovery_config_file }}"
+      - inventory
+      - database/
+  register: immich_s3_recovery_database_inventory
+  changed_when: false
+
+- name: List critical media objects
+  ansible.builtin.command:
+    argv:
+      - "{{ immich_s3_recovery_restore_command }}"
+      - --config
+      - "{{ immich_s3_recovery_config_file }}"
+      - inventory
+      - "{{ item }}"
+  loop:
+    - media/library/
+    - media/upload/
+    - media/profile/
+  register: immich_s3_recovery_media_inventories
+  changed_when: false
+
+- name: Report the recovery inventory
+  ansible.builtin.debug:
+    msg:
+      database_recovery_points: "{{ immich_s3_recovery_database_inventory.stdout_lines }}"
+      media_objects: >-
+        {{ immich_s3_recovery_media_inventories.results
+           | map(attribute='stdout_lines') | map('length') | sum }}

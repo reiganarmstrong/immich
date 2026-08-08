@@ -52,6 +52,13 @@ The bucket is protected with `prevent_destroy`. Removing it requires an
 intentional code change, emptying all object versions after their retention
 periods, and a separate administrative action.
 
+The lifecycle configuration retains critical media indefinitely. It expires
+the obsolete `media/thumbs/` and `media/encoded-video/` prefixes after their
+365-day default Object Lock and removes the resulting noncurrent versions after
+one day. The cheaper optional cleanup at the Deep Archive 180-day minimum is
+documented in
+[`docs/generated-assets-cleanup.md`](../docs/generated-assets-cleanup.md).
+
 ## Backup credentials
 
 Terraform deliberately does not create an access key, because the secret would

@@ -112,6 +112,8 @@
       destination: immich-s3-backup
     - source: immich-s3-restore.sh
       destination: immich-s3-restore
+    - source: immich-s3-prune-generated.sh
+      destination: immich-s3-prune-generated
 
 - name: Install deployment and recovery documentation
   ansible.builtin.copy:
@@ -129,6 +131,10 @@
       destination: docs/ansible-guide.md
     - source: docs/disaster-recovery.md
       destination: docs/disaster-recovery.md
+    - source: docs/recovery-manual-steps.md
+      destination: docs/recovery-manual-steps.md
+    - source: docs/generated-assets-cleanup.md
+      destination: docs/generated-assets-cleanup.md
     - source: terraform/README.md
       destination: terraform/README.md
   when: not ansible_check_mode

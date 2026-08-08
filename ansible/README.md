@@ -12,6 +12,7 @@ task block, template, handler, variable, and execution phase in this role.
 
 - Required Debian packages used by the scripts.
 - Root-owned backup and restore commands in `/usr/local/sbin`.
+- A dry-run-first generated-asset cleanup command.
 - `/etc/immich-s3-backup.env` and the persistent state directory.
 - An optional dedicated AWS credentials file sourced from Ansible Vault data.
 - The systemd service and persistent 04:00 America/New_York timer.
@@ -127,3 +128,23 @@ installed copies and leaves runtime state and completed backups intact.
 For the complete AWS-to-host sequence, see
 [`docs/deployment.md`](../docs/deployment.md). Recovery procedures are in
 [`docs/disaster-recovery.md`](../docs/disaster-recovery.md).
+
+## Run a recovery
+
+`recover.yml` is phase-based because Deep Archive retrieval is asynchronous:
+
+```sh
+cd /srv/immich/ansible
+ansible-playbook -i inventory.yml recover.yml -e @vars.yml \
+  -e immich_s3_recovery_phase=inventory
+```
+
+Available phases are `inventory`, `request`, `status`, `download`, `apply`,
+`regenerate`, and `finalize`. The `apply` phase refuses to replace media or
+PostgreSQL unless `immich_s3_recovery_confirm_apply=true`; `finalize` likewise
+requires explicit confirmation before scheduled backups resume. Existing live
+data is preserved in rollback locations by default.
+
+See [the manual recovery steps](../docs/recovery-manual-steps.md) for the
+complete sequence, monthly database selection, API-key requirements, validation
+checklist, and the remaining decisions that cannot be safely automated.

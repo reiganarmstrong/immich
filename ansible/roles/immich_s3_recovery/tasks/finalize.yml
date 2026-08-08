@@ -1,0 +1,26 @@
+---
+- name: Require explicit confirmation to resume scheduled backups
+  ansible.builtin.assert:
+    that:
+      - immich_s3_recovery_confirm_finalize | bool
+    fail_msg: >-
+      Validate users, albums, representative originals, and generated assets,
+      then set immich_s3_recovery_confirm_finalize=true.
+
+- name: Confirm the restored Immich API is available
+  ansible.builtin.uri:
+    url: "{{ immich_s3_recovery_api_url }}/server/ping"
+    method: GET
+    status_code: 200
+
+- name: Re-enable scheduled S3 backups
+  ansible.builtin.systemd_service:
+    name: immich-s3-backup.timer
+    enabled: true
+    state: started
+
+- name: Report recovery finalization
+  ansible.builtin.debug:
+    msg: >-
+      Scheduled backups are active again. Keep the local rollback directories
+      until the restored system has passed your normal validation period.

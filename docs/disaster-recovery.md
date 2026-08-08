@@ -1,14 +1,16 @@
 # Immich S3 disaster recovery
 
 This runbook provisions and operates an off-site Immich backup in Amazon S3.
-Media is retained indefinitely in Glacier Deep Archive. PostgreSQL recovery
-points use a rolling daily/monthly policy.
+Critical media is retained indefinitely in Glacier Deep Archive. PostgreSQL
+recovery points use a rolling daily/monthly policy.
 
 ## Backup contents and recovery objectives
 
 | Prefix | Contents | Storage class | Retention |
 | --- | --- | --- | --- |
-| `media/` | Complete `UPLOAD_LOCATION` except local DB dumps; includes Immich's backup-directory marker | Glacier Deep Archive | Indefinite; each new version is immutable for 365 days |
+| `media/library/` | Original assets managed by the storage template | Glacier Deep Archive | Indefinite; each new version is immutable for 365 days |
+| `media/upload/` | Original assets and in-progress uploads | Glacier Deep Archive | Indefinite; each new version is immutable for 365 days |
+| `media/profile/` | User profile images | Glacier Deep Archive | Indefinite; each new version is immutable for 365 days |
 | `database/daily/` | One fresh logical dump per successful day | S3 Standard | 30 days, governance locked for 30 days |
 | `database/monthly/` | First successful dump copied for each month | Glacier Deep Archive | 365 days, governance locked for 365 days |
 | `manifests/` | Completion metadata | S3 Standard | 30 days, governance locked for 30 days |
@@ -19,9 +21,13 @@ up to 48 hours with Bulk retrieval, followed by download time. Deep Archive's
 180-day minimum is a billing duration, not a delay before an object can be
 restored.
 
-The media lifecycle has no expiration rule. Object Lock stops deletion for the
-first 365 days; after that, the media remains stored indefinitely unless an
-authorized administrator deliberately deletes it.
+Generated `thumbs/` and `encoded-video/` content is deliberately omitted.
+Recovery recreates their marker files and queues Immich to regenerate them.
+Object Lock stops deletion of critical media versions for the first 365 days;
+after that, critical media remains stored indefinitely.
+
+Objects written by the previous full-media policy are covered by a separate
+[lowest-cost generated-asset cleanup plan](generated-assets-cleanup.md).
 
 ## Why the service runs at 04:00 New York time
 
@@ -103,8 +109,7 @@ sudo /usr/local/sbin/immich-s3-backup \
   --dry-run
 ```
 
-The initial real run transfers the existing library (approximately 27 GB on
-this host):
+The initial real run transfers the critical originals and profiles:
 
 ```sh
 sudo systemctl start immich-s3-backup.service
@@ -132,68 +137,21 @@ Standard manifest.
 
 ## Restore procedure
 
-Never restore directly over a running Immich installation. Use an empty staging
-directory, validate the result, and only then follow the Immich version-matched
-restore procedure.
+The supported recovery path is `ansible/recover.yml`. Its phases automate:
 
-1. List available database points and media:
+1. Inventorying database points and media.
+2. Requesting and monitoring Deep Archive restoration.
+3. Downloading into an empty staging directory.
+4. Validating critical media, storage markers, and the gzip dump.
+5. Preserving the old live data, replacing media, and restoring PostgreSQL in
+   one transaction after explicit confirmation.
+6. Starting Immich and queueing forced thumbnail and video regeneration.
+7. Re-enabling scheduled backups after explicit final validation.
 
-   ```sh
-   sudo /usr/local/sbin/immich-s3-restore \
-     --config /etc/immich-s3-backup.env \
-     inventory database/
-   sudo /usr/local/sbin/immich-s3-restore \
-     --config /etc/immich-s3-backup.env \
-     inventory media/
-   ```
-
-2. Request the media restore. Bulk is the default and least expensive; use
-   Standard when recovery time is more important:
-
-   ```sh
-   sudo /usr/local/sbin/immich-s3-restore \
-     --config /etc/immich-s3-backup.env \
-     request --tier Bulk media/
-   ```
-
-   If using an archived monthly database point, request its prefix too:
-
-   ```sh
-   sudo /usr/local/sbin/immich-s3-restore \
-     --config /etc/immich-s3-backup.env \
-     request --tier Bulk database/monthly/
-   ```
-
-3. Monitor restoration:
-
-   ```sh
-   sudo /usr/local/sbin/immich-s3-restore \
-     --config /etc/immich-s3-backup.env \
-     status media/
-   ```
-
-4. When all requested media reports `ready`, download to an empty directory.
-   Omitting the database key selects the newest daily dump:
-
-   ```sh
-   sudo /usr/local/sbin/immich-s3-restore \
-     --config /etc/immich-s3-backup.env \
-     download /srv/immich/restore-staging
-   ```
-
-   To select a specific database point, pass its key as the final argument.
-
-5. Confirm the staging directory contains `library/`, `upload/`, `profile/`,
-   `thumbs/`, `encoded-video/`, and `backups/`. Validate the selected dump:
-
-   ```sh
-   gzip -t /srv/immich/restore-staging/backups/*.sql.gz
-   ```
-
-6. On the recovery host, restore the staged upload root and database using the
-   documentation for the matching Immich version. The database dump was made
-   with `--clean --if-exists`; use a fresh PostgreSQL data directory and the
-   official single-transaction restore workflow.
+Deep Archive waiting, recovery-point selection, destructive approval, visual
+validation, and eventual removal of local rollback copies remain operator
+decisions. Follow [the manual recovery steps](recovery-manual-steps.md) for the
+exact phase commands and safeguards.
 
 ## Recovery material stored elsewhere
 
@@ -202,6 +160,7 @@ Keep these outside both this repository and the recovery bucket:
 - The real `/srv/immich/.env` secrets in a password manager.
 - The backup IAM access key in a password manager and either root's AWS
   profile or the ignored, Vault-encrypted Ansible variables file.
+- An admin API key with `job.create` permission for generated-asset recovery.
 - AWS administrative recovery credentials that can run Terraform and initiate
   emergency retention changes.
 - Any future OAuth, SMTP, or external-library credentials.

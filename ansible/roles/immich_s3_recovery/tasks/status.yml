@@ -1,0 +1,39 @@
+---
+- name: Read critical media restore status
+  ansible.builtin.command:
+    argv:
+      - "{{ immich_s3_recovery_restore_command }}"
+      - --config
+      - "{{ immich_s3_recovery_config_file }}"
+      - status
+  register: immich_s3_recovery_media_status
+  changed_when: false
+
+- name: Read selected monthly database restore status
+  ansible.builtin.command:
+    argv:
+      - "{{ immich_s3_recovery_restore_command }}"
+      - --config
+      - "{{ immich_s3_recovery_config_file }}"
+      - status
+      - "{{ immich_s3_recovery_database_key }}"
+  register: immich_s3_recovery_database_status
+  changed_when: false
+  when: immich_s3_recovery_database_key.startswith('database/monthly/')
+
+- name: Summarize restore status
+  ansible.builtin.debug:
+    msg:
+      media_ready: >-
+        {{ immich_s3_recovery_media_status.stdout_lines
+           | select('match', '^ready\t') | list | length }}
+      media_in_progress: >-
+        {{ immich_s3_recovery_media_status.stdout_lines
+           | select('match', '^in-progress\t') | list | length }}
+      media_not_requested: >-
+        {{ immich_s3_recovery_media_status.stdout_lines
+           | select('match', '^not-requested\t') | list | length }}
+      database: >-
+        {{ immich_s3_recovery_database_status.stdout_lines
+           if immich_s3_recovery_database_status is not skipped
+           else ['The selected daily database object is already online.'] }}

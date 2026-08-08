@@ -1,0 +1,34 @@
+---
+immich_s3_recovery_phase: status
+immich_s3_recovery_restore_tier: Bulk
+immich_s3_recovery_database_key: ""
+
+immich_s3_recovery_restore_command: >-
+  {{ immich_s3_backup_install_dir | default('/usr/local/sbin') }}/immich-s3-restore
+immich_s3_recovery_config_file: >-
+  {{ immich_s3_backup_config_file | default('/etc/immich-s3-backup.env') }}
+immich_s3_recovery_compose_dir: >-
+  {{ immich_s3_backup_compose_dir | default('/srv/immich') }}
+immich_s3_recovery_upload_location: >-
+  {{ immich_s3_backup_upload_location | default('/srv/immich/library') }}
+immich_s3_recovery_db_data_location: /srv/immich/postgres
+immich_s3_recovery_postgres_service: database
+immich_s3_recovery_postgres_container: >-
+  {{ immich_s3_backup_postgres_container | default('immich_postgres') }}
+immich_s3_recovery_db_name: >-
+  {{ immich_s3_backup_db_name | default('immich') }}
+immich_s3_recovery_db_user: >-
+  {{ immich_s3_backup_db_user | default('postgres') }}
+
+immich_s3_recovery_staging_dir: /srv/immich/restore-staging
+immich_s3_recovery_upload_rollback_dir: >-
+  {{ immich_s3_recovery_upload_location }}/.pre-s3-recovery
+immich_s3_recovery_database_rollback_dir: >-
+  {{ immich_s3_recovery_db_data_location }}.pre-s3-recovery
+immich_s3_recovery_preserve_existing_data: true
+immich_s3_recovery_confirm_apply: false
+immich_s3_recovery_confirm_finalize: false
+
+immich_s3_recovery_api_url: http://127.0.0.1:2283/api
+immich_s3_recovery_api_key: ""
+immich_s3_recovery_api_start_timeout_seconds: 300

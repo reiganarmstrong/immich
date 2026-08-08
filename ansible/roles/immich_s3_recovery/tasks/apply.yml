@@ -1,0 +1,221 @@
+---
+- name: Require explicit confirmation for the destructive recovery phase
+  ansible.builtin.assert:
+    that:
+      - immich_s3_recovery_confirm_apply | bool
+    fail_msg: >-
+      The apply phase replaces the live media directories and PostgreSQL data.
+      Set immich_s3_recovery_confirm_apply=true only after reviewing staging.
+
+- name: Validate staged recovery data before changing the live deployment
+  ansible.builtin.include_tasks: validate_staging.yml
+
+- name: Inspect rollback destinations
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ immich_s3_recovery_upload_rollback_dir }}"
+    - "{{ immich_s3_recovery_database_rollback_dir }}"
+  register: immich_s3_recovery_rollback_destinations
+  when: immich_s3_recovery_preserve_existing_data | bool
+
+- name: Refuse to overwrite previous rollback data
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+    fail_msg: >-
+      Rollback destination already exists. Move or remove it deliberately
+      before applying another recovery: {{ item.item }}
+  loop: "{{ immich_s3_recovery_rollback_destinations.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: immich_s3_recovery_preserve_existing_data | bool
+
+- name: Stop scheduled backups during recovery
+  ansible.builtin.systemd_service:
+    name: immich-s3-backup.timer
+    state: stopped
+
+- name: Stop the Immich Compose deployment
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ immich_s3_recovery_compose_dir }}"
+      - down
+  changed_when: true
+
+- name: Ensure the live upload root exists
+  ansible.builtin.file:
+    path: "{{ immich_s3_recovery_upload_location }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Inspect live media directories
+  ansible.builtin.stat:
+    path: "{{ immich_s3_recovery_upload_location }}/{{ item }}"
+  loop:
+    - backups
+    - encoded-video
+    - library
+    - profile
+    - thumbs
+    - upload
+  register: immich_s3_recovery_live_media
+
+- name: Create the media rollback directory
+  ansible.builtin.file:
+    path: "{{ immich_s3_recovery_upload_rollback_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: immich_s3_recovery_preserve_existing_data | bool
+
+- name: Preserve existing live media directories
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ item.stat.path }}"
+      - "{{ immich_s3_recovery_upload_rollback_dir }}/{{ item.item }}"
+  loop: "{{ immich_s3_recovery_live_media.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - immich_s3_recovery_preserve_existing_data | bool
+    - item.stat.exists
+  changed_when: true
+
+- name: Remove existing live media directories without preserving them
+  ansible.builtin.file:
+    path: "{{ item.stat.path }}"
+    state: absent
+  loop: "{{ immich_s3_recovery_live_media.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - not immich_s3_recovery_preserve_existing_data | bool
+    - item.stat.exists
+
+- name: Copy validated recovery media into the live upload root
+  ansible.builtin.command:
+    argv:
+      - cp
+      - --archive
+      - "{{ immich_s3_recovery_staging_dir }}/."
+      - "{{ immich_s3_recovery_upload_location }}/"
+  changed_when: true
+
+- name: Inspect the live PostgreSQL data directory
+  ansible.builtin.stat:
+    path: "{{ immich_s3_recovery_db_data_location }}"
+  register: immich_s3_recovery_live_database
+
+- name: Preserve the existing PostgreSQL data directory
+  ansible.builtin.command:
+    argv:
+      - mv
+      - "{{ immich_s3_recovery_db_data_location }}"
+      - "{{ immich_s3_recovery_database_rollback_dir }}"
+  when:
+    - immich_s3_recovery_preserve_existing_data | bool
+    - immich_s3_recovery_live_database.stat.exists
+  changed_when: true
+
+- name: Remove the existing PostgreSQL data directory without preserving it
+  ansible.builtin.file:
+    path: "{{ immich_s3_recovery_db_data_location }}"
+    state: absent
+  when:
+    - not immich_s3_recovery_preserve_existing_data | bool
+    - immich_s3_recovery_live_database.stat.exists
+
+- name: Create the fresh PostgreSQL data directory
+  ansible.builtin.file:
+    path: "{{ immich_s3_recovery_db_data_location }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Create the recovery containers
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ immich_s3_recovery_compose_dir }}"
+      - create
+  changed_when: true
+
+- name: Start only PostgreSQL
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ immich_s3_recovery_compose_dir }}"
+      - up
+      - --detach
+      - "{{ immich_s3_recovery_postgres_service }}"
+  changed_when: true
+
+- name: Wait for PostgreSQL to become healthy
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - --format
+      - "{{ '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' }}"
+      - "{{ immich_s3_recovery_postgres_container }}"
+  register: immich_s3_recovery_postgres_health
+  changed_when: false
+  until: immich_s3_recovery_postgres_health.stdout in ['healthy', 'running']
+  retries: 60
+  delay: 5
+
+- name: Restore the PostgreSQL dump in one transaction
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail &&
+      gzip --decompress --stdout {{ immich_s3_recovery_dump_file | quote }} |
+      sed "s/SELECT pg_catalog.set_config('search_path', '', false);/SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', true);/g" |
+      docker exec --interactive {{ immich_s3_recovery_postgres_container | quote }}
+      psql
+      --dbname={{ immich_s3_recovery_db_name | quote }}
+      --username={{ immich_s3_recovery_db_user | quote }}
+      --single-transaction
+      --set ON_ERROR_STOP=on
+    executable: /bin/bash
+  changed_when: true
+
+- name: Start the complete Immich deployment
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - "{{ immich_s3_recovery_compose_dir }}"
+      - up
+      - --detach
+  changed_when: true
+
+- name: Wait for the restored Immich API
+  ansible.builtin.uri:
+    url: "{{ immich_s3_recovery_api_url }}/server/ping"
+    method: GET
+    status_code: 200
+  register: immich_s3_recovery_api_ping
+  until: immich_s3_recovery_api_ping.status == 200
+  retries: "{{ (immich_s3_recovery_api_start_timeout_seconds / 5) | int }}"
+  delay: 5
+
+- name: Report the completed database and media restore
+  ansible.builtin.debug:
+    msg: >-
+      Critical media and PostgreSQL are restored. Run the regenerate phase with
+      an admin API key to queue thumbnails and encoded videos, then validate
+      the recovered timeline before re-enabling scheduled backups.
